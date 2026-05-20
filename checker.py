@@ -22,15 +22,20 @@ SOFTWARE.
 """
 
 import os
+import sys
 import argparse
 from collections import defaultdict
 import fnmatch
 
-MAP_RELATED_FILES = ["*.ytd", "*.ymt", "*.ydr", "*.ydd", "*.ytyp", "*.ybn", "*.ycd", "*.ymap", "*.ynv", "*.ytyp", "*.ypt"]
+MAP_RELATED_FILES = ["*.ytd", "*.ymt", "*.ydr", "*.ydd", "*.ytyp", "*.ybn", "*.ycd", "*.ymap", "*.ynv", "*.ypt"]
 
-def find_collisions(directory, ignored_files=None, output_file=None):
+def scan_directory(directory, ignored_files=None):
+    """Walk *directory* and group map-related files by lowercased filename.
+
+    Returns a dict mapping ``filename -> [paths]``. This is the exact data the
+    CLI has always built internally; both the CLI and the GUI consume it.
+    """
     file_dict = defaultdict(list)
-    collisions = 0
 
     for foldername, _, filenames in os.walk(directory):
         for filename in filenames:
@@ -38,15 +43,21 @@ def find_collisions(directory, ignored_files=None, output_file=None):
 
             if not any(fnmatch.fnmatch(filename.lower(), pattern.lower()) for pattern in MAP_RELATED_FILES):
                 continue
-            
+
             if ignored_files and any(fnmatch.fnmatch(filename.lower(), pattern.lower()) for pattern in ignored_files):
                 continue
-            
+
             file_key = filename.lower()
             file_dict[file_key].append(file_path)
 
+    return file_dict
+
+def find_collisions(directory, ignored_files=None, output_file=None):
+    file_dict = scan_directory(directory, ignored_files)
+    collisions = 0
+
     if output_file:
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w', encoding='utf-8') as f:
             for filename, paths in file_dict.items():
                 if len(paths) > 1:
                     f.write(f'Possible collisions: {filename}\n')
@@ -69,6 +80,8 @@ def find_collisions(directory, ignored_files=None, output_file=None):
 
         print(f"Total collisions found: {collisions}")
 
+    return collisions
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Find map collisions in a directory.")
     parser.add_argument("directory", help="The directory to scan for map collisions.")
@@ -76,4 +89,5 @@ if __name__ == "__main__":
     parser.add_argument("--output", help="Output file to write the list of collisions to.")
     args = parser.parse_args()
 
-    find_collisions(args.directory, ignored_files=args.ignore, output_file=args.output)
+    collisions = find_collisions(args.directory, ignored_files=args.ignore, output_file=args.output)
+    sys.exit(1 if collisions else 0)
